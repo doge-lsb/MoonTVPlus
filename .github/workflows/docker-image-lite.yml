@@ -1,6 +1,6 @@
 name: Build & Push Docker lite image
 
-on:
+# on:
   workflow_dispatch:
     inputs:
       tag:
