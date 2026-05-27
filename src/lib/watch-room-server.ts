@@ -575,6 +575,11 @@ export class WatchRoomServer {
 
       this.rooms.forEach((room, roomId) => {
         const timeSinceHeartbeat = now - room.lastOwnerHeartbeat;
+        const isScreenSharing = room.currentState?.type === 'screen' && room.currentState.status === 'sharing';
+
+        if (isScreenSharing) {
+          return;
+        }
 
         // 如果房主心跳超过30秒，清除播放状态
         if (timeSinceHeartbeat > clearStateTimeout && room.currentState !== null) {

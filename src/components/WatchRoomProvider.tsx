@@ -1,7 +1,7 @@
 // WatchRoom 全局状态管理 Provider
 'use client';
 
-import React, { createContext, useCallback,useContext, useEffect, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
 
 import { useWatchRoom } from '@/hooks/useWatchRoom';
@@ -10,7 +10,7 @@ import Toast, { ToastProps } from '@/components/Toast';
 
 import { getAuthInfoFromBrowserCookie } from '@/lib/auth';
 
-import type { ChatMessage, Member, MusicState, Room, RoomType, ScreenState, WatchRoomConfig } from '@/types/watch-room';
+import type { ChatMessage, Member, MusicSyncState, Room, RoomType, ScreenState, WatchRoomConfig } from '@/types/watch-room';
 
 // Import type from watch-room-socket
 type WatchRoomSocket = import('@/lib/watch-room-socket').WatchRoomSocket;
@@ -60,12 +60,12 @@ interface WatchRoomContextType {
   changeLiveChannel: (state: any) => void;
   startScreenShare: (state: ScreenState) => void;
   stopScreenShare: () => void;
-  changeMusic: (state: MusicState) => void;
-  updateMusicState: (state: MusicState) => void;
-  updateMusicQueue: (state: MusicState) => void;
-  playMusic: (state: MusicState) => void;
-  pauseMusic: (state: MusicState) => void;
-  seekMusic: (state: MusicState) => void;
+  changeMusic: (state: MusicSyncState) => void;
+  updateMusicState: (state: MusicSyncState) => void;
+  updateMusicQueue: (state: MusicSyncState) => void;
+  playMusic: (state: MusicSyncState) => void;
+  pauseMusic: (state: MusicSyncState) => void;
+  seekMusic: (state: MusicSyncState) => void;
   clearRoomState: () => void;
 
   // 重连

@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { useWatchRoomContext } from '@/components/WatchRoomProvider';
-import type { MusicQueueItem, MusicState } from '@/types/watch-room';
+import type { MusicQueueItem, MusicSyncState } from '@/types/watch-room';
 
 interface LyricLine {
   time: number;
@@ -73,7 +73,7 @@ function parseLyric(lyricText = '', tlyricText = ''): LyricLine[] {
   })).filter((line) => line.text || line.translation);
 }
 
-function adjustedTime(state: Pick<MusicState, 'currentTime' | 'updatedAt'>, playing: boolean) {
+function adjustedTime(state: Pick<MusicSyncState, 'currentTime' | 'updatedAt'>, playing: boolean) {
   if (!playing) return state.currentTime;
   return Math.max(0, state.currentTime + (Date.now() - state.updatedAt) / 1000);
 }
@@ -232,9 +232,12 @@ export default function WatchRoomMusicPage() {
   const volumeRef = useRef(100);
   const playbackRequestIdRef = useRef(0);
   const lyricRequestIdRef = useRef(0);
-  const lyricsContainerRef = useRef<HTMLDivElement>(null);
+  const mobileLyricsContainerRef = useRef<HTMLDivElement>(null);
+  const desktopLyricsContainerRef = useRef<HTMLDivElement>(null);
+  const mobileVolumeControlRef = useRef<HTMLDivElement>(null);
+  const desktopVolumeControlRef = useRef<HTMLDivElement>(null);
 
-  const [state, setState] = useState<MusicState | null>(() => (
+  const [state, setState] = useState<MusicSyncState | null>(() => (
     currentRoom?.currentState?.type === 'music' ? currentRoom.currentState : null
   ));
   const [lyrics, setLyrics] = useState<LyricLine[]>([]);
@@ -283,7 +286,7 @@ export default function WatchRoomMusicPage() {
 
   useEffect(() => {
     if (currentLyricIndex < 0) return;
-    const container = lyricsContainerRef.current;
+    const container = window.innerWidth < 768 ? mobileLyricsContainerRef.current : desktopLyricsContainerRef.current;
     if (!container) return;
     const active = container.querySelector<HTMLElement>(`[data-lyric-index="${currentLyricIndex}"]`);
     if (!active) return;
@@ -312,6 +315,22 @@ export default function WatchRoomMusicPage() {
   }, []);
 
   useEffect(() => {
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!showVolumeSlider) return;
+      const target = event.target as Node | null;
+      if (!target) return;
+      const insideMobile = mobileVolumeControlRef.current?.contains(target) ?? false;
+      const insideDesktop = desktopVolumeControlRef.current?.contains(target) ?? false;
+      if (!insideMobile && !insideDesktop) {
+        setShowVolumeSlider(false);
+      }
+    };
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    return () => document.removeEventListener('pointerdown', handlePointerDown);
+  }, [showVolumeSlider]);
+
+  useEffect(() => {
     volumeRef.current = volume;
     if (audioRef.current) {
       audioRef.current.volume = volume / 100;
@@ -337,7 +356,7 @@ export default function WatchRoomMusicPage() {
     if (audioContextRef.current.state === 'suspended') await audioContextRef.current.resume();
   };
 
-  const applyPlaybackState = async (nextState: MusicState) => {
+  const applyPlaybackState = async (nextState: MusicSyncState) => {
     const audio = audioRef.current;
     if (!audio) return;
     const requestId = ++playbackRequestIdRef.current;
@@ -415,7 +434,7 @@ export default function WatchRoomMusicPage() {
   useEffect(() => {
     if (!socket) return;
 
-    const handleState = (nextState: MusicState) => {
+    const handleState = (nextState: MusicSyncState) => {
       setState(nextState);
       setCurrentTime(adjustedTime(nextState, nextState.isPlaying));
       if (Number.isFinite(nextState.song.duration) && nextState.song.duration) {
@@ -491,7 +510,7 @@ export default function WatchRoomMusicPage() {
 
   const progress = duration > 0 ? Math.min(100, Math.max(0, (currentTime / duration) * 100)) : 0;
   const song = state?.song;
-  const nextSong = state && state.queue.length > 1 ? state.queue[(state.currentIndex + 1) % state.queue.length] : null;
+  const nextSong = state?.nextSong || null;
   const themeRootClass = isDark ? 'bg-zinc-950 text-white' : 'bg-white text-zinc-900';
   const showCoverPanel = mobilePanel === 'cover';
   const showLyricsPanel = mobilePanel === 'lyrics';
@@ -530,26 +549,117 @@ export default function WatchRoomMusicPage() {
 
         {song ? (
           <>
-            <div className="md:hidden flex items-center justify-center gap-2">
-              <button
-                type="button"
-                onClick={() => setMobilePanel('cover')}
-                className={`rounded-full px-4 py-2 text-sm transition-colors ${showCoverPanel ? 'bg-emerald-500 text-white' : isDark ? 'bg-white/10 text-zinc-300' : 'bg-zinc-100 text-zinc-700'}`}
-              >
-                封面
-              </button>
-              <button
-                type="button"
-                onClick={() => setMobilePanel('lyrics')}
-                className={`rounded-full px-4 py-2 text-sm transition-colors ${showLyricsPanel ? 'bg-emerald-500 text-white' : isDark ? 'bg-white/10 text-zinc-300' : 'bg-zinc-100 text-zinc-700'}`}
-              >
-                歌词
-              </button>
+            <div className="md:hidden">
+              <div className="mx-auto flex w-full max-w-[430px] flex-col gap-3">
+                <div ref={mobileVolumeControlRef} className={`rounded-2xl border px-3 py-3 ${isDark ? 'border-white/10 bg-black/20' : 'border-zinc-200 bg-white/80 shadow-sm'}`}>
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setMobilePanel(showCoverPanel ? 'lyrics' : 'cover')}
+                      className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                    >
+                      <div className="h-11 w-11 shrink-0 overflow-hidden rounded-lg border border-white/10 bg-zinc-800">
+                        {song.pic ? (
+                          <img src={song.pic} alt={song.name} className="h-full w-full object-cover" />
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center text-base text-zinc-500">♪</div>
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-semibold">{song.name}</div>
+                        <div className={`truncate text-xs ${isDark ? 'text-zinc-500' : 'text-zinc-600'}`}>{song.artist}</div>
+                      </div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowVolumeSlider((prev) => !prev)}
+                      className={`relative shrink-0 transition-colors ${isDark ? 'text-zinc-400 hover:text-white' : 'text-zinc-600 hover:text-zinc-900'}`}
+                      title="音量"
+                    >
+                      <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.707.707L4.586 13H2a1 1 0 01-1-1V8a1 1 0 011-1h2.586l3.707-3.707a1 1 0 011.09-.217zM14.657 2.929a1 1 0 011.414 0A9.972 9.972 0 0119 10a9.972 9.972 0 01-2.929 7.071 1 1 0 01-1.414-1.414A7.971 7.971 0 0017 10c0-2.21-.894-4.208-2.343-5.657a1 1 0 010-1.414zm-2.829 2.828a1 1 0 011.415 0A5.983 5.983 0 0115 10a5.984 5.984 0 01-1.757 4.243 1 1 0 01-1.415-1.415A3.984 3.984 0 0013 10a3.983 3.983 0 00-1.172-2.828 1 1 0 010-1.415z" clipRule="evenodd" />
+                      </svg>
+                      <div className={`absolute right-0 top-6 z-20 transition-opacity ${showVolumeSlider ? 'opacity-100' : 'pointer-events-none opacity-0'}`}>
+                        <div className={`rounded-lg border p-3 shadow-xl ${isDark ? 'border-white/10 bg-zinc-900/95' : 'border-zinc-200 bg-white'}`}>
+                          <div className="flex flex-col items-center gap-2">
+                            <span className={`text-xs font-mono ${isDark ? 'text-zinc-400' : 'text-zinc-600'}`}>{volume}</span>
+                            <input
+                              type="range"
+                              min={0}
+                              max={100}
+                              value={volume}
+                              onChange={(e) => setVolume(Number(e.target.value))}
+                              className="h-24 w-2 cursor-pointer appearance-none rounded-full accent-emerald-400"
+                              style={{ writingMode: 'vertical-lr', WebkitAppearance: 'slider-vertical' }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+
+                {showCoverPanel ? (
+                  <div className={`rounded-2xl border px-4 py-4 ${isDark ? 'border-white/10 bg-black/20' : 'border-zinc-200 bg-white/80 shadow-sm'}`}>
+                    <div className="flex flex-col gap-4">
+                      <VinylTurntable song={song} isPlaying={Boolean(state?.isPlaying)} />
+                      <AudioSpectrumCanvas bars={bars} compact volume={volume} />
+                      <div className="flex items-center gap-2 text-xs tabular-nums">
+                        <span className={`w-10 ${isDark ? 'text-zinc-500' : 'text-zinc-600'}`}>{formatTime(currentTime)}</span>
+                        <div className={`relative h-1.5 flex-1 overflow-hidden rounded-full ${isDark ? 'bg-white/10' : 'bg-zinc-200'}`}>
+                          <div className="h-full rounded-full bg-emerald-400" style={{ width: `${progress}%` }} />
+                        </div>
+                        <span className={`w-10 text-right ${isDark ? 'text-zinc-500' : 'text-zinc-600'}`}>{formatTime(duration)}</span>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                <div
+                  ref={mobileLyricsContainerRef}
+                  className={`rounded-2xl border px-4 py-4 ${isDark ? 'border-white/10 bg-black/20' : 'border-zinc-200 bg-white/80 shadow-sm'}`}
+                >
+                    <div className="max-h-[64vh] overflow-y-auto px-1">
+                      {lyrics.length > 0 ? (
+                        <div className="space-y-3">
+                          {lyrics.map((line, index) => (
+                            <div
+                              key={`${line.time}-${index}`}
+                              data-lyric-index={index}
+                              className={`text-center transition-all duration-300 ${
+                                index === currentLyricIndex
+                                  ? lyricActiveClass
+                                  : index === currentLyricIndex - 1 || index === currentLyricIndex + 1
+                                    ? lyricNearbyClass
+                                    : lyricIdleClass
+                              }`}
+                            >
+                              <div>{line.text || '♪'}</div>
+                              {line.translation && <div className={`mt-1 text-sm font-normal ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>{line.translation}</div>}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className={`flex min-h-[48vh] items-center justify-center ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>暂无歌词</div>
+                      )}
+                    </div>
+                    <div className="mt-3">
+                      <AudioSpectrumCanvas bars={bars} compact volume={volume} />
+                    </div>
+                    <div className="mt-4 flex items-center gap-2 text-xs tabular-nums">
+                      <span className={`w-10 ${isDark ? 'text-zinc-500' : 'text-zinc-600'}`}>{formatTime(currentTime)}</span>
+                      <div className={`relative h-1.5 flex-1 overflow-hidden rounded-full ${isDark ? 'bg-white/10' : 'bg-zinc-200'}`}>
+                        <div className="h-full rounded-full bg-emerald-400" style={{ width: `${progress}%` }} />
+                      </div>
+                      <span className={`w-10 text-right ${isDark ? 'text-zinc-500' : 'text-zinc-600'}`}>{formatTime(duration)}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
 
-            <div className="grid flex-1 gap-4 md:grid-cols-[420px_minmax(0,1fr)]">
+            <div className="hidden md:grid flex-1 gap-4 md:grid-cols-[420px_minmax(0,1fr)]">
               <div className={`${showCoverPanel ? 'block' : 'hidden'} min-w-0 md:block`}>
-                <div className={`rounded-lg border p-4 md:p-6 ${isDark ? 'border-white/10 bg-black/20' : 'border-zinc-200 bg-white/80 shadow-sm'}`}>
+                  <div ref={desktopVolumeControlRef} className={`rounded-lg border p-4 md:p-6 ${isDark ? 'border-white/10 bg-black/20' : 'border-zinc-200 bg-white/80 shadow-sm'}`}>
                   <div className="relative">
                     <button
                       type="button"
@@ -596,7 +706,7 @@ export default function WatchRoomMusicPage() {
               </div>
 
               <div
-                ref={lyricsContainerRef}
+                ref={desktopLyricsContainerRef}
                 className={`${showLyricsPanel ? 'block' : 'hidden'} min-h-0 rounded-lg border p-4 md:block md:h-[70vh] md:overflow-y-auto md:p-6 ${isDark ? 'border-white/10 bg-black/20' : 'border-zinc-200 bg-white/80 shadow-sm'}`}
               >
                 {lyrics.length > 0 ? (

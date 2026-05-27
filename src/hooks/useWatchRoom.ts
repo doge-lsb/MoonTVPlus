@@ -9,7 +9,7 @@ import type {
   ChatMessage,
   LiveState,
   Member,
-  MusicState,
+  MusicSyncState,
   PlayState,
   Room,
   RoomType,
@@ -335,7 +335,7 @@ export function useWatchRoom(
   }, [isOwner]);
 
   const changeMusic = useCallback(
-    (state: MusicState) => {
+    (state: MusicSyncState) => {
       const sock = watchRoomSocketManager.getSocket();
       if (!sock || !isOwner) return;
 
@@ -345,7 +345,7 @@ export function useWatchRoom(
   );
 
   const updateMusicState = useCallback(
-    (state: MusicState) => {
+    (state: MusicSyncState) => {
       const sock = watchRoomSocketManager.getSocket();
       if (!sock || !isOwner) return;
 
@@ -355,17 +355,17 @@ export function useWatchRoom(
   );
 
   const updateMusicQueue = useCallback(
-    (state: MusicState) => {
+    (state: MusicSyncState) => {
       const sock = watchRoomSocketManager.getSocket();
       if (!sock || !isOwner) return;
 
-      sock.emit('music:queue', state);
+      sock.emit('music:update', state);
     },
     [isOwner]
   );
 
   const playMusic = useCallback(
-    (state: MusicState) => {
+    (state: MusicSyncState) => {
       const sock = watchRoomSocketManager.getSocket();
       if (!sock || !isOwner) return;
 
@@ -375,7 +375,7 @@ export function useWatchRoom(
   );
 
   const pauseMusic = useCallback(
-    (state: MusicState) => {
+    (state: MusicSyncState) => {
       const sock = watchRoomSocketManager.getSocket();
       if (!sock || !isOwner) return;
 
@@ -385,7 +385,7 @@ export function useWatchRoom(
   );
 
   const seekMusic = useCallback(
-    (state: MusicState) => {
+    (state: MusicSyncState) => {
       const sock = watchRoomSocketManager.getSocket();
       if (!sock || !isOwner) return;
 
@@ -478,7 +478,7 @@ export function useWatchRoom(
       }
     });
 
-    const handleMusicState = (state: MusicState) => {
+    const handleMusicState = (state: MusicSyncState) => {
       if (currentRoom) {
         setCurrentRoom((prev) => (prev ? { ...prev, currentState: state } : null));
       }
